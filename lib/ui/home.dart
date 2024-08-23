@@ -1,11 +1,15 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:ocr_ai/functions/image_pick.dart';
 import 'package:ocr_ai/models/OcrResponse.dart';
 import 'package:ocr_ai/recognizer/interface/text_recognizer.dart';
 import 'package:ocr_ai/recognizer/mlkit_recognizer.dart';
+import 'package:image/image.dart' as img;
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -18,12 +22,14 @@ class _HomeState extends State<Home> {
   late ImagePicker _picker;
   late ITextRecognizer _recognizer;
   OcrResponse? _response;
+  late ObjectDetector _objectDetector;
 
   @override
   void initState() {
     super.initState();
     _picker = ImagePicker();
     _recognizer = MLKitTextRecognizer();
+    _initializeDetector();
   }
 
   @override
@@ -32,16 +38,63 @@ class _HomeState extends State<Home> {
     (_recognizer as MLKitTextRecognizer).dispose();
   }
 
+  void _initializeDetector() async {
+    // final modelPath = 'assets/ml/object_labeler.tflite';
+    final options = ObjectDetectorOptions(
+      mode: DetectionMode.single,
+      classifyObjects: true,
+      multipleObjects: false,
+      //modelPath: '',
+    );
+    _objectDetector = ObjectDetector(options: options);
+  }
+
   Future<String?> obtainImage(ImageSource source) async {
     final file = await _picker.pickImage(source: source);
     return file?.path;
   }
 
-  void processImage(String imgPath) async {
+  void processOCR(String imgPath) async {
     final text = await _recognizer.processImage(imgPath);
     setState(() {
       _response = OcrResponse(imgPath: imgPath, recognizedText: text);
     });
+  }
+
+  void processImage(String imagePath) async {
+    final inputImage = InputImage.fromFilePath(imagePath);
+    final objects = await _objectDetector.processImage(inputImage);
+
+    for (DetectedObject object in objects) {
+      if (object.labels
+          .any((label) => label.text.toLowerCase().contains('card'))) {
+        final croppedImagePath =
+            await cropAndSaveImage(imagePath, object.boundingBox);
+        setState(() {
+          _response = OcrResponse(imgPath: croppedImagePath, recognizedText: 'text');
+        });
+      }
+    }
+    return null;
+  }
+
+   Future<String> cropAndSaveImage(String imagePath, Rect boundingBox) async {
+    final image = img.decodeImage(await File(imagePath).readAsBytes())!;
+    final croppedImage = img.copyCrop(
+      image,
+      x: boundingBox.left.toInt(),
+      y: boundingBox.top.toInt(),
+      width: boundingBox.width.toInt(),
+      height: boundingBox.height.toInt(),
+    );
+
+    final directory = await getApplicationDocumentsDirectory();
+    final croppedImagePath = path.join(
+        directory.path, 'cropped_${DateTime.now().millisecondsSinceEpoch}.png');
+    final croppedImageFile = File(croppedImagePath);
+    await croppedImageFile.writeAsBytes(img.encodePng(croppedImage));
+
+    return croppedImagePath;
   }
 
   @override
@@ -58,14 +111,14 @@ class _HomeState extends State<Home> {
               onCameraPressed: () async {
                 final imgPath = await obtainImage(ImageSource.camera);
                 if (imgPath != null) {
-                  processImage(imgPath);
+                  processOCR(imgPath);
                 }
                 Navigator.of(context).pop();
               },
               onGalleryPressed: () async {
                 final imgPath = await obtainImage(ImageSource.gallery);
                 if (imgPath != null) {
-                  processImage(imgPath);
+                  processOCR(imgPath);
                 }
                 Navigator.of(context).pop();
               },
@@ -74,7 +127,7 @@ class _HomeState extends State<Home> {
         },
         child: const Icon(Icons.add),
       ),
-       body: _response == null
+      body: _response == null
           ? const Center(
               child: Text('Pick image to continue'),
             )
