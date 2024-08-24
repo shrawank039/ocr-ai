@@ -40,6 +40,7 @@ dependencies:
   google_mlkit_object_detection: ^0.13.0
   image: ^4.0.17
   path_provider: ^2.1.4
+  camera: ^0.10.5+2
 
 dev_dependencies:
   flutter_test:
