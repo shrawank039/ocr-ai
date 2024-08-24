@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:ocr_ai/ui/card_scanner.dart';
 import 'package:ocr_ai/ui/home.dart';
 
-void main() {
+void main() async {
+  await dotenv.load(fileName: '.env');
   runApp(const MyApp());
 }
 
@@ -18,7 +20,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: CardScannerScreen(),//Home(),
+      home: const Home(),
     );
   }
 }

@@ -8,6 +8,9 @@ import 'package:ocr_ai/models/OcrResponse.dart';
 import 'package:ocr_ai/recognizer/interface/text_recognizer.dart';
 import 'package:ocr_ai/recognizer/mlkit_recognizer.dart';
 import 'package:image/image.dart' as img;
+import 'package:ocr_ai/repositories/openai_repo.dart';
+import 'package:ocr_ai/ui/card_scanner.dart';
+import 'package:ocr_ai/ui/data_mapping.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
@@ -169,6 +172,51 @@ class _HomeState extends State<Home> {
                         ),
                         const SizedBox(height: 10),
                         Text(_response!.recognizedText),
+                        // OpenAI Function
+                        if (_response!.recognizedText.isNotEmpty)
+                        MaterialButton(
+                          child: const Text('Map Data'),
+                          onPressed: () async {
+                            // Show a loading indicator while waiting for the API response
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (BuildContext context) {
+                                return const Center(
+                                    child: CircularProgressIndicator());
+                              },
+                            );
+                            try {
+                              // Call the API to fetch the mapped data
+                              final Map<String, dynamic> jsonResponse =
+                                  await fetchOpenAIResponse(
+                                      _response!.recognizedText);
+                              // Navigate to the JsonDisplayPage and pass the JSON response
+                              Navigator.of(context).pushReplacement(
+                                MaterialPageRoute(
+                                  builder: (context) => JsonDisplayPage(
+                                      jsonResponse: jsonResponse),
+                                ),
+                              );
+                            } catch (e) {
+                              // Handle the error (optional: show an error message)
+                              print('Failed to map data: $e');
+
+                              // Optionally close the loading dialog if an error occurs
+                              Navigator.of(context).pop();
+                            } finally {
+                              // Close the loading indicator
+                              Navigator.of(context).pop();
+                            }
+                          },
+                        ),
+                        MaterialButton(
+                          child: const Text('Scan Card'),
+                          onPressed: () =>
+                            Navigator.push(context, 
+                            MaterialPageRoute(builder: (context) => CardScannerApp()),
+                        ),
+                        )
                       ],
                     )),
               ],
