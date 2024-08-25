@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:ocr_ai/ui/card_scanner.dart';
+import 'package:ocr_ai/ui/data_mapping.dart';
 import 'package:ocr_ai/ui/home.dart';
 
 void main() async {

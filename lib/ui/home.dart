@@ -74,14 +74,15 @@ class _HomeState extends State<Home> {
         final croppedImagePath =
             await cropAndSaveImage(imagePath, object.boundingBox);
         setState(() {
-          _response = OcrResponse(imgPath: croppedImagePath, recognizedText: 'text');
+          _response =
+              OcrResponse(imgPath: croppedImagePath, recognizedText: 'text');
         });
       }
     }
     return null;
   }
 
-   Future<String> cropAndSaveImage(String imagePath, Rect boundingBox) async {
+  Future<String> cropAndSaveImage(String imagePath, Rect boundingBox) async {
     final image = img.decodeImage(await File(imagePath).readAsBytes())!;
     final croppedImage = img.copyCrop(
       image,
@@ -174,49 +175,51 @@ class _HomeState extends State<Home> {
                         Text(_response!.recognizedText),
                         // OpenAI Function
                         if (_response!.recognizedText.isNotEmpty)
-                        MaterialButton(
-                          child: const Text('Map Data'),
-                          onPressed: () async {
-                            // Show a loading indicator while waiting for the API response
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (BuildContext context) {
-                                return const Center(
-                                    child: CircularProgressIndicator());
-                              },
-                            );
-                            try {
-                              // Call the API to fetch the mapped data
-                              final Map<String, dynamic> jsonResponse =
-                                  await fetchOpenAIResponse(
-                                      _response!.recognizedText);
-                              // Navigate to the JsonDisplayPage and pass the JSON response
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(
-                                  builder: (context) => JsonDisplayPage(
-                                      jsonResponse: jsonResponse),
-                                ),
-                              );
-                            } catch (e) {
-                              // Handle the error (optional: show an error message)
-                              print('Failed to map data: $e');
+                          MaterialButton(
+                            color: Colors.black,
+                            textColor: Colors.white,
+                            child: const Text('Map Data'),
+                            onPressed: () async {
+                              // Show a loading indicator while waiting for the API response
+                              // showDialog(
+                              //   context: context,
+                              //   barrierDismissible: false,
+                              //   builder: (BuildContext context) {
+                              //     return const Center(
+                              //         child: CircularProgressIndicator());
+                              //   },
+                              // );
+                              try {
+                                // Call the API to fetch the mapped data
+                                final Map<String, dynamic> jsonResponse =  await fetchOpenAIResponse(
+                                     _response!.recognizedText);
+                                // Navigate to the JsonDisplayPage and pass the JSON response
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) => JsonDisplayPage(
+                                        jsonResponse: jsonResponse),
+                                  ),
+                                );
+                              } catch (e) {
+                                // Handle the error (optional: show an error message)
+                                debugPrint('Failed to map data: $e');
 
-                              // Optionally close the loading dialog if an error occurs
-                              Navigator.of(context).pop();
-                            } finally {
-                              // Close the loading indicator
-                              Navigator.of(context).pop();
-                            }
-                          },
-                        ),
-                        MaterialButton(
-                          child: const Text('Scan Card'),
-                          onPressed: () =>
-                            Navigator.push(context, 
-                            MaterialPageRoute(builder: (context) => CardScannerApp()),
-                        ),
-                        )
+                                // Optionally close the loading dialog if an error occurs
+                               // Navigator.of(context).pop();
+                              } finally {
+                                // Close the loading indicator
+                                // Navigator.of(context).pop();
+                              }
+                            },
+                          ),
+                        // MaterialButton(
+                        //   child: const Text('Scan Card'),
+                        //   onPressed: () => Navigator.push(
+                        //     context,
+                        //     MaterialPageRoute(
+                        //         builder: (context) => CardScannerApp()),
+                        //   ),
+                        // )
                       ],
                     )),
               ],
