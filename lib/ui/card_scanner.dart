@@ -2,19 +2,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart';
+import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-
-class CardScannerApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: CardScannerScreen(),
-    );
-  }
-}
 
 class CardScannerScreen extends StatefulWidget {
   @override
@@ -23,8 +14,9 @@ class CardScannerScreen extends StatefulWidget {
 
 class _CardScannerScreenState extends State<CardScannerScreen> {
   late CameraController _cameraController;
-  late ObjectDetector _objectDetector;
+  late Interpreter _interpreter;
   bool _isCameraInitialized = false;
+  bool _isModelLoaded = false;
   bool _isDetecting = false;
   Rect? _detectedCardRect;
   String? _croppedCardPath;
@@ -33,12 +25,12 @@ class _CardScannerScreenState extends State<CardScannerScreen> {
   void initState() {
     super.initState();
     _initializeCamera();
-    _initializeDetector();
+    _loadModel();
   }
 
   void _initializeCamera() async {
     final cameras = await availableCameras();
-    _cameraController = CameraController(cameras[0], ResolutionPreset.high);
+    _cameraController = CameraController(cameras[0], ResolutionPreset.medium);
     await _cameraController.initialize();
     setState(() {
       _isCameraInitialized = true;
@@ -46,74 +38,149 @@ class _CardScannerScreenState extends State<CardScannerScreen> {
     _startCardDetection();
   }
 
-  void _initializeDetector() async {
-    final modelPath = 'assets/ml/object_labeler.tflite';
-    final options = ObjectDetectorOptions(
-      mode: DetectionMode.stream,
-      classifyObjects: true,
-      multipleObjects: false,
-    );
-    _objectDetector = ObjectDetector(options: options);
+  Future<void> _loadModel() async {
+    try {
+      _interpreter = await Interpreter.fromAsset('assets/model.tflite');
+      setState(() {
+        _isModelLoaded = true;
+      });
+    } catch (e) {
+      print('Error loading model: $e');
+    }
   }
 
   void _startCardDetection() {
     _cameraController.startImageStream((image) {
-      if (!_isDetecting) {
+      if (!_isDetecting && _isModelLoaded) {
         _isDetecting = true;
-        _processImage(image);
+        _detectCard(image);
       }
     });
   }
 
-  void _processImage(CameraImage image) async {
-    final WriteBuffer allBytes = WriteBuffer();
-    for (Plane plane in image.planes) {
-      allBytes.putUint8List(plane.bytes);
+   Future<void> _detectCard(CameraImage image) async {
+    if (_interpreter == null) return;
+
+    try {
+      final inputImage = _preprocessImage(image);
+      final outputShape = _interpreter!.getOutputTensor(0).shape;
+      final outputType = _interpreter!.getOutputTensor(0).type;
+
+      // Create output tensor
+      final outputBuffer =
+          List<double>.filled(outputShape.reduce((a, b) => a * b), 0)
+              .reshape(outputShape);
+
+      // Run inference
+      _interpreter!.run(inputImage, outputBuffer);
+
+      Rect? _postprocessOutput(
+          List<dynamic> output, int imageWidth, int imageHeight) {
+        // Convert outputBuffer to List<double>
+        final outputDoubles =
+            output.map((element) => element as double).toList();
+
+        // This is a placeholder implementation. You need to adjust this based on your model's output format.
+        // For example, if your model outputs [x, y, width, height, confidence] for each detection:
+        if (outputDoubles.length >= 5 && outputDoubles[4] > 0.5) {
+          // Assuming a confidence threshold of 0.5
+          return Rect.fromLTWH(
+            outputDoubles[0] * imageWidth,
+            outputDoubles[1] * imageHeight,
+            outputDoubles[2] * imageWidth,
+            outputDoubles[3] * imageHeight,
+          );
+        }
+        return null;
+      }
+
+      final detectedRect =
+          _postprocessOutput(outputBuffer, image.width, image.height);
+
+      setState(() {
+        _detectedCardRect = detectedRect;
+      });
+    } catch (e) {
+      print('Error during detection: $e');
+    } finally {
+      _isDetecting = false;
     }
-    final bytes = allBytes.done().buffer.asUint8List();
+  }
 
-    final Size imageSize =
-        Size(image.width.toDouble(), image.height.toDouble());
+  List<double> _preprocessImage(CameraImage image) {
+    // Convert YUV420 to RGB
+    final rgbImage = img.Image(width: image.width, height: image.height);
+    final yBuffer = image.planes[0].bytes;
+    final uBuffer = image.planes[1].bytes;
+    final vBuffer = image.planes[2].bytes;
 
-    final InputImageRotation imageRotation = InputImageRotation.rotation0deg;
+    int uvIndex = 0;
+    for (int y = 0; y < image.height; y++) {
+      for (int x = 0; x < image.width; x++) {
+        final yValue = yBuffer[y * image.width + x];
+        final uValue = uBuffer[uvIndex];
+        final vValue = vBuffer[uvIndex];
 
-    final InputImageFormat inputImageFormat = InputImageFormat.yuv420;
+        int r = (yValue + 1.402 * (vValue - 128)).round().clamp(0, 255);
+        int g = (yValue - 0.344136 * (uValue - 128) - 0.714136 * (vValue - 128))
+            .round()
+            .clamp(0, 255);
+        int b = (yValue + 1.772 * (uValue - 128)).round().clamp(0, 255);
 
-    // final planeData = image.planes.map(
-    //   (Plane plane) {
-    //     return InputImagePlaneMetadata(
-    //       bytesPerRow: plane.bytesPerRow,
-    //       height: plane.height,
-    //       width: plane.width,
-    //     );
-    //   },
-    // ).toList();
+        rgbImage.setPixelRgb(x, y, r, g, b);
 
-    final inputImageData = InputImageMetadata(
-      size: imageSize,
-      rotation: imageRotation,
-      format: inputImageFormat,
-      bytesPerRow: 100000,
-    );
-
-    final inputImage = InputImage.fromBytes(
-      bytes: bytes,
-      metadata: inputImageData,
-    );
-
-    final objects = await _objectDetector.processImage(inputImage);
-
-    for (DetectedObject object in objects) {
-      if (object.labels
-          .any((label) => label.text.toLowerCase().contains('card'))) {
-        setState(() {
-          _detectedCardRect = object.boundingBox;
-        });
-        break;
+        if (x % 2 == 1 && y % 2 == 1) {
+          uvIndex++;
+        }
       }
     }
 
-    _isDetecting = false;
+    // Resize and normalize the image
+    final resizedImage = img.copyResize(rgbImage, width: 300, height: 300);
+    // Use imageToByteList method
+    final inputBuffer = imageToByteList(resizedImage, 300, 300);
+    // Convert Uint8List to List<double>
+    final inputDoubles = inputBuffer.map((e) => e.toDouble()).toList();
+    return inputDoubles;
+  }
+
+  Uint8List imageToByteList(img.Image image, int inputSizeX, int inputSizeY) {
+    var resizedImage =
+        img.copyResize(image, width: inputSizeX, height: inputSizeY);
+
+    var convertedBytes = Uint8List(inputSizeX * inputSizeY * 3);
+    // Get the ByteBuffer from the Uint8List
+    var buffer = convertedBytes.buffer.asByteData();
+
+    int pixelIndex = 0;
+    for (int y = 0; y < resizedImage.height; y++) {
+      for (int x = 0; x < resizedImage.width; x++) {
+        img.Pixel pixel = resizedImage.getPixel(x, y);
+
+        // Extract color channels manually using bitwise operations
+        buffer.setUint8(pixelIndex++, (pixel.r.toInt() >> 16) & 0xFF); // Red
+        buffer.setUint8(pixelIndex++, (pixel.g.toInt() >> 8) & 0xFF); // Green
+        buffer.setUint8(pixelIndex++, pixel.b.toInt() & 0xFF); // Blue
+      }
+    }
+    return convertedBytes;
+  }
+
+
+  Rect? _postprocessOutput(
+      List<double> output, int imageWidth, int imageHeight) {
+    // This is a placeholder implementation. You need to adjust this based on your model's output format.
+    // For example, if your model outputs [x, y, width, height, confidence] for each detection:
+    if (output.length >= 5 && output[4] > 0.5) {
+      // Assuming a confidence threshold of 0.5
+      return Rect.fromLTWH(
+        output[0] * imageWidth,
+        output[1] * imageHeight,
+        output[2] * imageWidth,
+        output[3] * imageHeight,
+      );
+    }
+    return null;
   }
 
   Future<String?> _captureAndCropCard() async {
@@ -142,7 +209,7 @@ class _CardScannerScreenState extends State<CardScannerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isCameraInitialized) {
+    if (!_isCameraInitialized || !_isModelLoaded) {
       return Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
@@ -190,7 +257,7 @@ class _CardScannerScreenState extends State<CardScannerScreen> {
   @override
   void dispose() {
     _cameraController.dispose();
-    _objectDetector.close();
+    _interpreter.close();
     super.dispose();
   }
 }

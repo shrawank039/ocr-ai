@@ -1,6 +1,9 @@
 # Environment file
 .env
 
+# TF Model
+*.tflite
+
 # Miscellaneous
 *.class
 *.log
