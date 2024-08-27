@@ -1,7 +1,8 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:ocr_ai/functions/image_pick.dart';
 import 'package:ocr_ai/models/OcrResponse.dart';
@@ -25,31 +26,18 @@ class _HomeState extends State<Home> {
   late ImagePicker _picker;
   late ITextRecognizer _recognizer;
   OcrResponse? _response;
-  late ObjectDetector _objectDetector;
 
   @override
   void initState() {
     super.initState();
     _picker = ImagePicker();
     _recognizer = MLKitTextRecognizer();
-    _initializeDetector();
   }
 
   @override
   void dispose() {
     super.dispose();
     (_recognizer as MLKitTextRecognizer).dispose();
-  }
-
-  void _initializeDetector() async {
-    // final modelPath = 'assets/ml/object_labeler.tflite';
-    final options = ObjectDetectorOptions(
-      mode: DetectionMode.single,
-      classifyObjects: true,
-      multipleObjects: false,
-      //modelPath: '',
-    );
-    _objectDetector = ObjectDetector(options: options);
   }
 
   Future<String?> obtainImage(ImageSource source) async {
@@ -62,24 +50,6 @@ class _HomeState extends State<Home> {
     setState(() {
       _response = OcrResponse(imgPath: imgPath, recognizedText: text);
     });
-  }
-
-  void processImage(String imagePath) async {
-    final inputImage = InputImage.fromFilePath(imagePath);
-    final objects = await _objectDetector.processImage(inputImage);
-
-    for (DetectedObject object in objects) {
-      if (object.labels
-          .any((label) => label.text.toLowerCase().contains('card'))) {
-        final croppedImagePath =
-            await cropAndSaveImage(imagePath, object.boundingBox);
-        setState(() {
-          _response =
-              OcrResponse(imgPath: croppedImagePath, recognizedText: 'text');
-        });
-      }
-    }
-    return null;
   }
 
   Future<String> cropAndSaveImage(String imagePath, Rect boundingBox) async {
@@ -173,6 +143,7 @@ class _HomeState extends State<Home> {
                         ),
                         const SizedBox(height: 10),
                         Text(_response!.recognizedText),
+                        const SizedBox(height: 10),
                         // OpenAI Function
                         if (_response!.recognizedText.isNotEmpty)
                           MaterialButton(
@@ -180,20 +151,11 @@ class _HomeState extends State<Home> {
                             textColor: Colors.white,
                             child: const Text('Map Data'),
                             onPressed: () async {
-                              // Show a loading indicator while waiting for the API response
-                              // showDialog(
-                              //   context: context,
-                              //   barrierDismissible: false,
-                              //   builder: (BuildContext context) {
-                              //     return const Center(
-                              //         child: CircularProgressIndicator());
-                              //   },
-                              // );
                               try {
                                 // Call the API to fetch the mapped data
-                                final Map<String, dynamic> jsonResponse =  await fetchOpenAIResponse(
-                                     _response!.recognizedText);
-                                // Navigate to the JsonDisplayPage and pass the JSON response
+                                final Map<String, dynamic> jsonResponse =
+                                    await fetchOpenAIResponse(
+                                        _response!.recognizedText);
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
                                     builder: (context) => JsonDisplayPage(
@@ -201,23 +163,19 @@ class _HomeState extends State<Home> {
                                   ),
                                 );
                               } catch (e) {
-                                // Handle the error (optional: show an error message)
                                 debugPrint('Failed to map data: $e');
-
-                                // Optionally close the loading dialog if an error occurs
-                               // Navigator.of(context).pop();
-                              } finally {
-                                // Close the loading indicator
-                                // Navigator.of(context).pop();
                               }
                             },
                           ),
+                        const SizedBox(height: 10),
                         // MaterialButton(
+                        //   color: Colors.black,
+                        //   textColor: Colors.white,
                         //   child: const Text('Scan Card'),
                         //   onPressed: () => Navigator.push(
                         //     context,
                         //     MaterialPageRoute(
-                        //         builder: (context) => CardScannerApp()),
+                        //         builder: (context) => CardScannerScreen()),
                         //   ),
                         // )
                       ],
