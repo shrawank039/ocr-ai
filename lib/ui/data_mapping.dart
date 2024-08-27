@@ -15,7 +15,6 @@ class JsonDisplayPage extends StatelessWidget {
     );
   }
 
-  // Recursive function to build widgets for each key-value pair
   List<Widget> _buildJsonWidgets(Map<String, dynamic> json) {
     List<Widget> widgets = [];
 
@@ -30,21 +29,18 @@ class JsonDisplayPage extends StatelessWidget {
         );
       } else if (value is List) {
         // If the value is a list, handle each item in the list
-        widgets.add(ListTile(title: Text(key)));
         for (var item in value) {
           if (item is Map<String, dynamic>) {
-            widgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Column(
+            widgets.add(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: _buildJsonWidgets(item),
               ),
-            ));
+            );
           } else {
-            widgets.add(Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: ListTile(
-                title: Text(item.toString()),
+            widgets.add(
+              ListTile(
+                title: Text(key),
                 subtitle: Container(
                   decoration: BoxDecoration(
                     border: Border.all(
@@ -63,7 +59,7 @@ class JsonDisplayPage extends StatelessWidget {
                   ),
                 ),
               ),
-            ));
+            );
           }
         }
       } else {
