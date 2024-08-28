@@ -3,17 +3,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:ocr_ai/functions/image_pick.dart';
 import 'package:ocr_ai/models/OcrResponse.dart';
 import 'package:ocr_ai/recognizer/interface/text_recognizer.dart';
 import 'package:ocr_ai/recognizer/mlkit_recognizer.dart';
-import 'package:image/image.dart' as img;
 import 'package:ocr_ai/repositories/openai_repo.dart';
-import 'package:ocr_ai/ui/card_scanner.dart';
 import 'package:ocr_ai/ui/data_mapping.dart';
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -26,18 +23,28 @@ class _HomeState extends State<Home> {
   late ImagePicker _picker;
   late ITextRecognizer _recognizer;
   OcrResponse? _response;
+  DocumentScanner? _documentScanner;
+
+  DocumentScannerOptions documentOptions = DocumentScannerOptions(
+    documentFormat: DocumentFormat.jpeg,
+    mode: ScannerMode.filter,
+    pageLimit: 1, 
+    isGalleryImport: true,
+  );
 
   @override
   void initState() {
     super.initState();
     _picker = ImagePicker();
     _recognizer = MLKitTextRecognizer();
+    _documentScanner = DocumentScanner(options: documentOptions);
   }
 
   @override
   void dispose() {
     super.dispose();
     (_recognizer as MLKitTextRecognizer).dispose();
+    (_documentScanner as DocumentScanner).close();
   }
 
   Future<String?> obtainImage(ImageSource source) async {
@@ -52,23 +59,14 @@ class _HomeState extends State<Home> {
     });
   }
 
-  Future<String> cropAndSaveImage(String imagePath, Rect boundingBox) async {
-    final image = img.decodeImage(await File(imagePath).readAsBytes())!;
-    final croppedImage = img.copyCrop(
-      image,
-      x: boundingBox.left.toInt(),
-      y: boundingBox.top.toInt(),
-      width: boundingBox.width.toInt(),
-      height: boundingBox.height.toInt(),
-    );
-
-    final directory = await getApplicationDocumentsDirectory();
-    final croppedImagePath = path.join(
-        directory.path, 'cropped_${DateTime.now().millisecondsSinceEpoch}.png');
-    final croppedImageFile = File(croppedImagePath);
-    await croppedImageFile.writeAsBytes(img.encodePng(croppedImage));
-
-    return croppedImagePath;
+  void startDocumentScan() async {
+    try {
+      DocumentScanningResult scannedDocument = await _documentScanner!.scanDocument();
+      final imgPath = scannedDocument.images.first;
+        processOCR(imgPath);
+    } catch (e) {
+      debugPrint('Failed to scan document: $e');
+    }
   }
 
   @override
@@ -78,27 +76,28 @@ class _HomeState extends State<Home> {
         title: const Text('OCR-AI'),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          showDialog(
-            context: context,
-            builder: (context) => imagePickAlert(
-              onCameraPressed: () async {
-                final imgPath = await obtainImage(ImageSource.camera);
-                if (imgPath != null) {
-                  processOCR(imgPath);
-                }
-                Navigator.of(context).pop();
-              },
-              onGalleryPressed: () async {
-                final imgPath = await obtainImage(ImageSource.gallery);
-                if (imgPath != null) {
-                  processOCR(imgPath);
-                }
-                Navigator.of(context).pop();
-              },
-            ),
-          );
-        },
+        onPressed: startDocumentScan,
+        // () {
+        //   showDialog(
+        //     context: context,
+        //     builder: (context) => imagePickAlert(
+        //       onCameraPressed: () async {
+        //         final imgPath = await obtainImage(ImageSource.camera);
+        //         if (imgPath != null) {
+        //           processOCR(imgPath);
+        //         }
+        //         Navigator.of(context).pop();
+        //       },
+        //       onGalleryPressed: () async {
+        //         final imgPath = await obtainImage(ImageSource.gallery);
+        //         if (imgPath != null) {
+        //           processOCR(imgPath);
+        //         }
+        //         Navigator.of(context).pop();
+        //       },
+        //     ),
+        //   );
+        // },
         child: const Icon(Icons.add),
       ),
       body: _response == null
@@ -168,16 +167,6 @@ class _HomeState extends State<Home> {
                             },
                           ),
                         const SizedBox(height: 10),
-                        // MaterialButton(
-                        //   color: Colors.black,
-                        //   textColor: Colors.white,
-                        //   child: const Text('Scan Card'),
-                        //   onPressed: () => Navigator.push(
-                        //     context,
-                        //     MaterialPageRoute(
-                        //         builder: (context) => CardScannerScreen()),
-                        //   ),
-                        // )
                       ],
                     )),
               ],
