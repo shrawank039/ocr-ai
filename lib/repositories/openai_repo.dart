@@ -26,7 +26,7 @@ Future<Map<String, dynamic>> fetchOpenAIResponse(String scannedText) async {
               'Extract the information from the following text: $scannedText.',
         },
       ],
-      'max_tokens': 256,
+      'max_tokens': 700,
     }),
   );
 
